@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import date, time
+from datetime import date
 
 # Configuração da página para celular
 st.set_page_config(page_title="Controle 99 - Cronos", layout="centered", page_icon="🚖")
@@ -9,6 +9,8 @@ st.set_page_config(page_title="Controle 99 - Cronos", layout="centered", page_ic
 # Conexão com banco de dados SQLite
 conn = sqlite3.connect("historico_corridas.db", check_same_thread=False)
 c = conn.cursor()
+
+# Criação da tabela com verificação de colunas
 c.execute('''
     CREATE TABLE IF NOT EXISTS jornadas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,6 +26,19 @@ c.execute('''
     )
 ''')
 conn.commit()
+
+# Garante compatibilidade caso a tabela antiga ainda exista
+try:
+    c.execute("ALTER TABLE jornadas ADD COLUMN horas_texto TEXT")
+    conn.commit()
+except:
+    pass
+
+try:
+    c.execute("ALTER TABLE jornadas ADD COLUMN horas_decimal REAL")
+    conn.commit()
+except:
+    pass
 
 st.title("🚖 Controle Financeiro 99")
 
@@ -54,7 +69,7 @@ if aba == "➕ Novo Lançamento":
     
     # Conversão automática para decimal para os cálculos
     total_horas_decimal = horas_input + (minutos_input / 60.0)
-    texto_tempo = f"{horas_input:02d}:{minutos_input:02d}h"
+    texto_tempo = f"{int(horas_input):02d}:{int(minutos_input):02d}h"
     
     with st.expander("⚙️ Configurações do Carro / Combustível"):
         kml = st.number_input("Consumo do Cronos (km/L)", value=12.8, step=0.1)
@@ -96,7 +111,10 @@ if aba == "➕ Novo Lançamento":
 elif aba == "📋 Histórico & Totais":
     st.subheader("Histórico e Somas Gerais")
     
-    df = pd.read_sql_query("SELECT id, data, km_rodados, faturamento, horas_texto, combustivel, reservas, lucro_liquido, ganho_hora FROM jornadas ORDER BY id DESC", conn)
+    try:
+        df = pd.read_sql_query("SELECT id, data, km_rodados, faturamento, horas_texto, combustivel, reservas, lucro_liquido, ganho_hora FROM jornadas ORDER BY id DESC", conn)
+    except:
+        df = pd.DataFrame()
     
     if not df.empty:
         # Somas e Totais Gerais
@@ -127,7 +145,6 @@ elif aba == "📋 Histórico & Totais":
         st.markdown("---")
         # Seção para Apagar
         with st.expander("🗑️ Opções para Apagar Histórico"):
-            # Apagar um lançamento específico pelo ID
             ids_disponiveis = df['id'].tolist()
             id_para_apagar = st.selectbox("Escolha o ID do registro que deseja apagar:", ids_disponiveis)
             if st.button("❌ Apagar Registro Selecionado"):
@@ -137,7 +154,6 @@ elif aba == "📋 Histórico & Totais":
                 st.rerun()
             
             st.markdown("---")
-            # Apagar tudo
             if st.checkbox("Tenho certeza de que quero apagar TODO o histórico"):
                 if st.button("🚨 Limpar Todo o Histórico", type="primary"):
                     c.execute("DELETE FROM jornadas")
